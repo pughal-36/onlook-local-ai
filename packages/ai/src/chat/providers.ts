@@ -32,7 +32,7 @@ export function initModel({
     let model: LanguageModel;
     let providerOptions: Record<string, any> | undefined;
     let headers: Record<string, string> | undefined;
-    let maxOutputTokens: number = MODEL_MAX_TOKENS[requestedModel] ?? 4096;
+    let maxOutputTokens: number = (MODEL_MAX_TOKENS as Record<string, number>)[requestedModel] ?? 4096;
 
     switch (requestedProvider) {
         case LLMProvider.OPENROUTER:
@@ -87,7 +87,7 @@ export function getOllamaProvider(
     const numCtx = options?.numCtx ?? parseOllamaNumCtx(process.env.OLLAMA_NUM_CTX);
     const baseFetch = options?.fetch ?? globalThis.fetch;
 
-    const wrappedFetch: typeof fetch = async (input, init) => {
+    const wrappedFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> = async (input, init) => {
         let requestInit = init;
 
         // Inject num_ctx into body if POST request
@@ -158,7 +158,7 @@ export function getOllamaProvider(
     const provider = createOpenAICompatible({
         name: 'ollama',
         baseURL,
-        fetch: wrappedFetch,
+        fetch: wrappedFetch as any,
     });
 
     return provider(model);

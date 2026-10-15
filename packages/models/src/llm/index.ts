@@ -40,7 +40,7 @@ export type ModelConfig = {
     maxOutputTokens: number;
 };
 
-export const MODEL_MAX_TOKENS: Record<string, number> = {
+export const MODEL_MAX_TOKENS = {
     [OPENROUTER_MODELS.CLAUDE_4_5_SONNET]: 200000,
     [OPENROUTER_MODELS.CLAUDE_3_5_HAIKU]: 200000,
     [OPENROUTER_MODELS.OPEN_AI_GPT_5_NANO]: 400000,
@@ -48,4 +48,4 @@ export const MODEL_MAX_TOKENS: Record<string, number> = {
     [OPENROUTER_MODELS.OPEN_AI_GPT_5]: 400000,
     [OLLAMA_MODELS.QWEN_2_5_CODER_3B]: 8192,
     [OLLAMA_MODELS.TINYLLAMA]: 2048,
-};
+} as const;

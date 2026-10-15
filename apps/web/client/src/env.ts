@@ -33,10 +33,23 @@ export const env = createEnv({
         GOOGLE_PRIVATE_KEY_ID: z.string().optional(),
 
         // Model providers
-        OPENROUTER_API_KEY: z.string(),
+        OPENROUTER_API_KEY: z.string().optional(),
         ANTHROPIC_API_KEY: z.string().optional(),
         GOOGLE_AI_STUDIO_API_KEY: z.string().optional(),
         OPENAI_API_KEY: z.string().optional(),
+
+        // Ollama & Task Provider Configuration
+        AI_PROVIDER: z.enum(['openrouter', 'ollama']).optional().default('openrouter'),
+        OLLAMA_BASE_URL: z.string().url().optional(),
+        OLLAMA_MODEL: z.string().optional(),
+        OLLAMA_NUM_CTX: z.coerce.number().optional(),
+
+        // Per-task provider overrides
+        AI_TASK_CHAT_PROVIDER: z.enum(['openrouter', 'ollama']).optional(),
+        AI_TASK_TOOL_REPAIR_PROVIDER: z.enum(['openrouter', 'ollama']).optional(),
+        AI_TASK_SUGGESTIONS_PROVIDER: z.enum(['openrouter', 'ollama']).optional(),
+        AI_TASK_TITLE_PROVIDER: z.enum(['openrouter', 'ollama']).optional(),
+        AI_TASK_PROJECT_NAME_PROVIDER: z.enum(['openrouter', 'ollama']).optional(),
 
         // n8n
         N8N_WEBHOOK_URL: z.string().optional(),
@@ -131,6 +144,19 @@ export const env = createEnv({
         OPENAI_API_KEY: process.env.OPENAI_API_KEY,
         OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
 
+        // Ollama & Task Provider Configuration
+        AI_PROVIDER: process.env.AI_PROVIDER,
+        OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL,
+        OLLAMA_MODEL: process.env.OLLAMA_MODEL,
+        OLLAMA_NUM_CTX: process.env.OLLAMA_NUM_CTX,
+
+        // Per-task provider overrides
+        AI_TASK_CHAT_PROVIDER: process.env.AI_TASK_CHAT_PROVIDER,
+        AI_TASK_TOOL_REPAIR_PROVIDER: process.env.AI_TASK_TOOL_REPAIR_PROVIDER,
+        AI_TASK_SUGGESTIONS_PROVIDER: process.env.AI_TASK_SUGGESTIONS_PROVIDER,
+        AI_TASK_TITLE_PROVIDER: process.env.AI_TASK_TITLE_PROVIDER,
+        AI_TASK_PROJECT_NAME_PROVIDER: process.env.AI_TASK_PROJECT_NAME_PROVIDER,
+
         // n8n
         N8N_WEBHOOK_URL: process.env.N8N_WEBHOOK_URL,
         N8N_API_KEY: process.env.N8N_API_KEY,
@@ -165,3 +191,36 @@ export const env = createEnv({
      */
     emptyStringAsUndefined: true,
 });
+
+/**
+ * Validates provider-specific credential requirements dynamically based on selected tasks.
+ */
+function validateProviderEnv() {
+    if (process.env.SKIP_ENV_VALIDATION) return;
+
+    const defaultProvider = process.env.AI_PROVIDER || 'openrouter';
+    const taskProviders = [
+        process.env.AI_TASK_CHAT_PROVIDER || defaultProvider,
+        process.env.AI_TASK_TOOL_REPAIR_PROVIDER || defaultProvider,
+        process.env.AI_TASK_SUGGESTIONS_PROVIDER || defaultProvider,
+        process.env.AI_TASK_TITLE_PROVIDER || defaultProvider,
+        process.env.AI_TASK_PROJECT_NAME_PROVIDER || defaultProvider,
+    ];
+
+    const needsOpenRouter = taskProviders.some((p) => p.toLowerCase() === 'openrouter');
+    if (needsOpenRouter && !process.env.OPENROUTER_API_KEY) {
+        throw new Error(
+            '❌ OPENROUTER_API_KEY is required because at least one AI task is configured to use OpenRouter. If you want an All-Ollama setup, set AI_PROVIDER=ollama (or configure all individual task providers to ollama).',
+        );
+    }
+
+    const needsOllama = taskProviders.some((p) => p.toLowerCase() === 'ollama');
+    if (needsOllama && process.env.OLLAMA_BASE_URL) {
+        try {
+            new URL(process.env.OLLAMA_BASE_URL);
+        } catch {
+            throw new Error(`❌ OLLAMA_BASE_URL must be a valid URL. Received: "${process.env.OLLAMA_BASE_URL}"`);
+        }
+    }
+}
+validateProviderEnv();

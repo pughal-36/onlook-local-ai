@@ -3,7 +3,7 @@ import { createTRPCRouter, protectedProcedure } from '@/server/api/trpc';
 import { trackEvent } from '@/utils/analytics/server';
 import { TRPCError } from '@trpc/server';
 import FirecrawlApp from '@mendable/firecrawl-js';
-import { initModel } from '@onlook/ai';
+import { resolveTaskConfig } from '@onlook/ai';
 import { getSandboxPreviewUrl, STORAGE_BUCKETS } from '@onlook/constants';
 import {
     branches,
@@ -318,10 +318,8 @@ export const projectRouter = createTRPCRouter({
         }))
         .mutation(async ({ ctx, input }): Promise<string> => {
             try {
-                const { model, providerOptions, headers } = initModel({
-                    provider: LLMProvider.OPENROUTER,
-                    model: OPENROUTER_MODELS.OPEN_AI_GPT_5_NANO,
-                });
+                const { modelConfig } = resolveTaskConfig('project_name');
+                const { model, providerOptions, headers } = modelConfig;
 
                 const MAX_NAME_LENGTH = 50;
                 const result = await generateText({
