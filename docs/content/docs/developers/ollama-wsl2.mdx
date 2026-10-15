@@ -1,0 +1,131 @@
+---
+title: Native Ollama & WSL2 Integration
+description: Guide for running Onlook with a local Ollama model hosted on Windows and accessed from Ubuntu on WSL2.
+---
+
+# Native Ollama & WSL2 Setup Guide
+
+Onlook supports running AI workflows locally via [Ollama](https://ollama.com). This guide details how to configure Ollama running on Windows 11 with Onlook running in Ubuntu on WSL2.
+
+---
+
+## 1. Windows Ollama Installation & Model Download
+
+1. Download and install Ollama from [ollama.com/download](https://ollama.com/download).
+2. Open PowerShell or Command Prompt on Windows and pull the target coding model:
+   ```powershell
+   ollama pull qwen2.5-coder:3b
+   ollama list
+   ```
+3. Verify the native API on Windows:
+   ```powershell
+   curl.exe http://localhost:11434/api/tags
+   ```
+
+---
+
+## 2. WSL2 Networking & Secure Port Proxy Configuration
+
+In WSL2 NAT networking mode, WSL cannot access `localhost:11434` directly because Windows Ollama listens only on loopback `127.0.0.1`.
+
+### Security Constraints
+- **Do not** expose Ollama publicly to local Wi-Fi / LAN (`0.0.0.0` unrestricted).
+- **Do not** disable Windows Defender Firewall.
+
+### Step-by-Step Configuration (Administrator PowerShell on Windows)
+
+1. **Set Up Scoped Port Proxy:**
+   Bind a Windows portproxy strictly to the virtual WSL network interface IP:
+   ```powershell
+   $WslHostIp = (Get-NetIPAddress -InterfaceAlias "*WSL*" -AddressFamily IPv4).IPAddress
+   netsh interface portproxy add v4tov4 listenaddress=$WslHostIp listenport=11434 connectaddress=127.0.0.1 connectport=11434
+   ```
+
+2. **Add Scoped Firewall Inbound Rule:**
+   Allow inbound connections on port 11434 **only** from the WSL virtual subnet (replace `172.23.32.0/20` with your actual WSL subnet):
+   ```powershell
+   New-NetFirewallRule -DisplayName "WSL2 to Ollama PortProxy" -Direction Inbound -LocalPort 11434 -Protocol TCP -Action Allow -LocalAddress $WslHostIp -RemoteAddress 172.23.32.0/20 -Profile Any
+   ```
+
+3. **Verify Proxy & Isolation:**
+   - On Windows: Run `netsh interface portproxy show all` to verify the binding.
+   - On WSL2: Verify connectivity:
+     ```bash
+     WIN_HOST=$(ip route show default | awk '{print $3; exit}')
+     curl -s --max-time 5 "http://$WIN_HOST:11434/api/tags"
+     ```
+   - From any other device on your local Wi-Fi: Attempting to connect to your Windows PC IP on port 11434 will be blocked.
+
+---
+
+## 3. Configuring the Context Window (`num_ctx`)
+
+Ollama defaults to a context window of 2048 tokens. For code generation in Onlook, `4096` tokens is recommended.
+
+### Method A: Environment Variable (Adapter Injection)
+Set in `.env`:
+```bash
+OLLAMA_NUM_CTX=4096
+```
+Onlook's provider adapter intercepts outgoing requests to `/v1/chat/completions` and injects `options: { num_ctx: 4096 }`.
+
+### Method B: Dedicated Ollama Modelfile (Engine-Enforced)
+To guarantee the context window is permanently embedded into Ollama's model runner regardless of client options:
+1. In Windows PowerShell:
+   ```powershell
+   @"
+   FROM qwen2.5-coder:3b
+   PARAMETER num_ctx 4096
+   "@ | Set-Content Modelfile
+   ollama create qwen2.5-coder:3b-ctx4k -f Modelfile
+   ```
+2. In Onlook `.env`:
+   ```bash
+   OLLAMA_MODEL="qwen2.5-coder:3b-ctx4k"
+   ```
+
+---
+
+## 4. Environment Configurations
+
+### Configuration A: All-Ollama Setup
+All AI tasks run locally on Ollama. **No OpenRouter API key is required.**
+
+```bash
+AI_PROVIDER="ollama"
+OLLAMA_BASE_URL="http://172.23.32.1:11434" # Or your discovered Windows host IP
+OLLAMA_MODEL="qwen2.5-coder:3b"
+OLLAMA_NUM_CTX="4096"
+```
+
+### Configuration B: Hybrid Setup
+Use OpenRouter for complex main chat while routing background title generation and suggestions to local Ollama:
+
+```bash
+AI_PROVIDER="openrouter"
+OPENROUTER_API_KEY="sk-or-v1-..."
+
+# Route background tasks to local Ollama:
+AI_TASK_SUGGESTIONS_PROVIDER="ollama"
+AI_TASK_TITLE_PROVIDER="ollama"
+AI_TASK_PROJECT_NAME_PROVIDER="ollama"
+
+OLLAMA_BASE_URL="http://172.23.32.1:11434"
+OLLAMA_MODEL="qwen2.5-coder:3b"
+```
+
+---
+
+## 5. Limitations
+
+Please be aware of the following architectural and hardware limitations when using Ollama:
+
+1. **CPU Inference Latency:** Running `qwen2.5-coder:3b` on an Intel 8th-Gen CPU without a dedicated GPU will generate tokens at approximately 5–15 tokens per second. Initial prompt evaluation for large contexts can take several seconds.
+2. **Model Reasoning & Complex Tool Calling:** `qwen2.5-coder:3b` is a lightweight 3-billion-parameter model. While capable for simple edits, it can struggle with complex multi-step instructions, structured schema repairs, or large multi-file diffs.
+3. **Context Window & Memory Usage:** Increasing `num_ctx` above 8192 on a 16 GB RAM machine can lead to high memory pressure, paging, and performance degradation.
+4. **No Vision Support:** `qwen2.5-coder:3b` is a text-only model. Image attachments will be rejected with an actionable error. Use OpenRouter or a vision-capable Ollama model (e.g. `llava`, `qwen2.5-vl`) for image workflows.
+5. **Platform Local Status:** While Ollama makes LLM generation completely local, Onlook itself still uses other platform services:
+   - Supabase (for database storage, user authentication, and conversation persistence).
+   - CodeSandbox (`CSB_API_KEY`) for live code rendering and previews.
+   - Fast-apply providers (Morph / Relace) if configured.
+   Running Ollama does not make Onlook's database or sandbox infrastructure fully offline.

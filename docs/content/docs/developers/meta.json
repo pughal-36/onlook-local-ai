@@ -4,6 +4,7 @@
         "running-locally",
         "architecture",
         "troubleshooting",
-        "appendix"
+        "appendix",
+        "ollama-wsl2"
     ]
 }

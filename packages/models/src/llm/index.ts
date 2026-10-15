@@ -2,6 +2,7 @@ import type { LanguageModel } from 'ai';
 
 export enum LLMProvider {
     OPENROUTER = 'openrouter',
+    OLLAMA = 'ollama',
 }
 
 export enum OPENROUTER_MODELS {
@@ -13,8 +14,16 @@ export enum OPENROUTER_MODELS {
     OPEN_AI_GPT_5_NANO = 'openai/gpt-5-nano',
 }
 
+export enum OLLAMA_MODELS {
+    QWEN_2_5_CODER_3B = 'qwen2.5-coder:3b',
+    TINYLLAMA = 'tinyllama:latest',
+}
+
+export type OllamaModelName = OLLAMA_MODELS | (string & {});
+
 interface ModelMapping {
     [LLMProvider.OPENROUTER]: OPENROUTER_MODELS;
+    [LLMProvider.OLLAMA]: OllamaModelName;
 }
 
 export type InitialModelPayload = {
@@ -37,4 +46,6 @@ export const MODEL_MAX_TOKENS = {
     [OPENROUTER_MODELS.OPEN_AI_GPT_5_NANO]: 400000,
     [OPENROUTER_MODELS.OPEN_AI_GPT_5_MINI]: 400000,
     [OPENROUTER_MODELS.OPEN_AI_GPT_5]: 400000,
+    [OLLAMA_MODELS.QWEN_2_5_CODER_3B]: 8192,
+    [OLLAMA_MODELS.TINYLLAMA]: 2048,
 } as const;
